@@ -182,7 +182,8 @@ class PublicLocationDetailView(APIView):
                 if first_price and last_price and first_price > 0:
                     total_growth = ((last_price - first_price) / first_price * 100)
                     years_diff = last_year.year - first_year.year
-                    cagr = ((last_price / first_price) ** (1/years_diff) - 1) * 100 if years_diff > 0 else 0
+                    # Convert Decimal to float for exponentiation
+                    cagr = (float(last_price / first_price) ** (1/years_diff) - 1) * 100 if years_diff > 0 else 0
                     
                     stats['overall_growth'][plot_type] = {
                         'total_growth_percent': round(float(total_growth), 2),
@@ -609,7 +610,8 @@ class LocationRateDetailView(APIView):
                 if first_price and last_price and first_price > 0:
                     total_growth = ((last_price - first_price) / first_price * 100)
                     years_diff = last_year.year - first_year.year
-                    cagr = ((last_price / first_price) ** (1/years_diff) - 1) * 100 if years_diff > 0 else 0
+                   # Convert Decimal to float for exponentiation
+                    cagr = (float(last_price / first_price) ** (1/years_diff) - 1) * 100 if years_diff > 0 else 0
                     
                     stats['overall_growth'][plot_type] = {
                         'total_growth_percent': round(float(total_growth), 2),

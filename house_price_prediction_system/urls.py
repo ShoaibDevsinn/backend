@@ -25,6 +25,7 @@ urlpatterns = [
     path('api/admin/', include('accounts.admin_urls')),  # ✅ This must exist
     path('api/listings/', include('listings.urls')),
     path('api/historical-rates/', include('historical_rates.urls')),
+    path('api/', include('predictions.urls')),
 ]
 
 if settings.DEBUG:

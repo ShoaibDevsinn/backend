@@ -1,7 +1,7 @@
+# accounts/authentication.py
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework.exceptions import AuthenticationFailed
 from django.contrib.auth import get_user_model
-from .models import Admin
 
 User = get_user_model()
 
@@ -20,20 +20,39 @@ class AdminJWTAuthentication(JWTAuthentication):
         user, token = result
         
         # Check if token has admin-specific claims
-        is_admin = token.payload.get('is_admin', False)
-        role = token.payload.get('role', '')
+        is_admin_claim = token.payload.get('is_admin', False)
+        role_claim = token.payload.get('role', '')
         
         # Token must have admin claims
-        if not is_admin and role != 'admin':
-            raise AuthenticationFailed('Invalid admin token. This endpoint requires admin authentication.')
+        if not is_admin_claim and role_claim != 'admin':
+            raise AuthenticationFailed(
+                'Invalid admin token. This endpoint requires admin authentication.',
+                code='invalid_admin_token'
+            )
+        
+        # Check user role (since User model uses 'role' field, not 'is_admin')
+        user_role = getattr(user, 'role', 'user')
         
         # User must have admin role
-        if not user.is_admin:
-            raise AuthenticationFailed('User does not have admin privileges.')
+        if user_role != 'admin':
+            raise AuthenticationFailed(
+                'User does not have admin privileges.',
+                code='not_admin'
+            )
         
-        # User must be active
-        if not user.is_active or user.status != 'active':
-            raise AuthenticationFailed('Admin account is deactivated.')
+        # Check if user is active
+        if not user.is_active:
+            raise AuthenticationFailed(
+                'Admin account is deactivated.',
+                code='account_inactive'
+            )
+        
+        # Check status field if it exists
+        if hasattr(user, 'status') and user.status != 'active':
+            raise AuthenticationFailed(
+                'Admin account is deactivated.',
+                code='account_inactive'
+            )
         
         return (user, token)
 
@@ -52,20 +71,39 @@ class UserJWTAuthentication(JWTAuthentication):
         
         user, token = result
         
-        # Check if token has admin claims (reject if yes)
-        is_admin = token.payload.get('is_admin', False)
-        role = token.payload.get('role', '')
+        # Check if token has admin claims
+        is_admin_claim = token.payload.get('is_admin', False)
+        role_claim = token.payload.get('role', '')
         
         # Reject admin tokens
-        if is_admin or role == 'admin':
-            raise AuthenticationFailed('Admin tokens are not allowed for user endpoints.')
+        if is_admin_claim or role_claim == 'admin':
+            raise AuthenticationFailed(
+                'Admin tokens are not allowed for user endpoints.',
+                code='admin_token_rejected'
+            )
+        
+        # Check user role
+        user_role = getattr(user, 'role', 'user')
         
         # User must NOT be admin
-        if user.is_admin:
-            raise AuthenticationFailed('Admin accounts cannot access user endpoints.')
+        if user_role == 'admin':
+            raise AuthenticationFailed(
+                'Admin accounts cannot access user endpoints.',
+                code='admin_access_denied'
+            )
         
-        # User must be active
-        if not user.is_active or user.status != 'active':
-            raise AuthenticationFailed('User account is deactivated.')
+        # Check if user is active
+        if not user.is_active:
+            raise AuthenticationFailed(
+                'User account is deactivated.',
+                code='account_inactive'
+            )
+        
+        # Check status field if it exists
+        if hasattr(user, 'status') and user.status != 'active':
+            raise AuthenticationFailed(
+                'User account is deactivated.',
+                code='account_inactive'
+            )
         
         return (user, token)

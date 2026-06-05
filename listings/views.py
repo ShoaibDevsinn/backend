@@ -279,7 +279,7 @@ class PublicGetListingDetailView(APIView):
             serializer = ListingSerializer(listing, context={'request': request})
             return Response({
                 'success': True,
-                'data': serializer.data
+                'data': serializer._validated_data
             })
         except Listing.DoesNotExist:
             return Response({
@@ -407,12 +407,6 @@ class AdminDashboardStatsView(APIView):
         
         recent_listings = listings.order_by('-created_at')[:5]
         recent_serializer = ListingListSerializer(recent_listings, many=True, context={'request': request})
-        
-        # Monthly stats for charts
-        from django.db.models.functions import TruncMonth
-        from django.db.models import Count, Sum
-        from datetime import datetime, timedelta
-        
         six_months_ago = datetime.now() - timedelta(days=180)
         monthly_stats = listings.filter(created_at__gte=six_months_ago).annotate(
             month=TruncMonth('created_at')
