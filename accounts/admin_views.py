@@ -13,8 +13,200 @@ from .admin_serializers import (
     AdminProfileSerializer, AdminProfileUpdateSerializer,
     AdminChangePasswordSerializer
 )
+import random
+import string
+from datetime import timedelta
+from django.core.mail import send_mail
+from django.conf import settings
 
 User = get_user_model()
+
+
+def generate_otp():
+    """Generate 6-digit OTP"""
+    return ''.join(random.choices(string.digits, k=6))
+
+class AdminForgotPasswordView(APIView):
+    """Send OTP to admin's email"""
+    authentication_classes = []
+    permission_classes = [AllowAny]
+    
+    def post(self, request):
+        email = request.data.get('email')
+        
+        if not email:
+            return Response({
+                'success': False,
+                'message': 'Email is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            admin = Admin.objects.get(email=email)
+        except Admin.DoesNotExist:
+            # For security, don't reveal if email exists
+            return Response({
+                'success': True,
+                'message': 'If your email is registered, you will receive an OTP'
+            }, status=status.HTTP_200_OK)
+        
+        # Generate OTP
+        otp = generate_otp()
+        
+        # Save OTP to admin
+        admin.otp_code = otp
+        admin.otp_created_at = timezone.now()
+        admin.otp_verified = False
+        admin.save()
+        
+        # Send email
+        try:
+            subject = 'Admin Password Reset OTP - House Price Predictor'
+            message = f"""
+            Hello Admin {admin.username},
+            
+            You requested to reset your admin password.
+            
+            Your OTP code is: {otp}
+            
+            This code is valid for 10 minutes.
+            
+            If you did not request this, please ignore this email.
+            
+            Regards,
+            House Price Predictor Team
+            """
+            
+            send_mail(
+                subject,
+                message,
+                settings.DEFAULT_FROM_EMAIL,
+                [email],
+                fail_silently=False,
+            )
+            
+            return Response({
+                'success': True,
+                'message': 'OTP sent to your email'
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response({
+                'success': False,
+                'message': f'Failed to send email: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class AdminVerifyOTPView(APIView):
+    """Verify OTP code for admin"""
+    authentication_classes = []
+    permission_classes = [AllowAny]
+    
+    def post(self, request):
+        email = request.data.get('email')
+        otp = request.data.get('otp')
+        
+        if not email or not otp:
+            return Response({
+                'success': False,
+                'message': 'Email and OTP are required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            admin = Admin.objects.get(email=email)
+        except Admin.DoesNotExist:
+            return Response({
+                'success': False,
+                'message': 'Invalid email'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        # Check if OTP exists and not expired
+        if not admin.otp_code or admin.otp_code != otp:
+            return Response({
+                'success': False,
+                'message': 'Invalid OTP code'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Check if OTP is expired (10 minutes)
+        if admin.otp_created_at:
+            expiry_time = admin.otp_created_at + timedelta(minutes=10)
+            if timezone.now() > expiry_time:
+                return Response({
+                    'success': False,
+                    'message': 'OTP has expired. Please request a new one.'
+                }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Mark OTP as verified
+        admin.otp_verified = True
+        admin.save()
+        
+        return Response({
+            'success': True,
+            'message': 'OTP verified successfully'
+        }, status=status.HTTP_200_OK)
+
+
+class AdminResetPasswordView(APIView):
+    """Reset admin password after OTP verification"""
+    authentication_classes = []
+    permission_classes = [AllowAny]
+    
+    def post(self, request):
+        email = request.data.get('email')
+        new_password = request.data.get('new_password')
+        confirm_password = request.data.get('confirm_password')
+        
+        if not email or not new_password or not confirm_password:
+            return Response({
+                'success': False,
+                'message': 'Email, new password and confirm password are required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        if new_password != confirm_password:
+            return Response({
+                'success': False,
+                'message': 'Passwords do not match'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        if len(new_password) < 6:
+            return Response({
+                'success': False,
+                'message': 'Password must be at least 6 characters'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            admin = Admin.objects.get(email=email)
+        except Admin.DoesNotExist:
+            return Response({
+                'success': False,
+                'message': 'Admin not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        # Check if OTP was verified
+        if not admin.otp_verified:
+            return Response({
+                'success': False,
+                'message': 'Please verify your OTP first'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Reset password
+        admin.set_password(new_password)
+        admin.otp_code = None
+        admin.otp_created_at = None
+        admin.otp_verified = False
+        admin.save()
+        
+        # Also update User model password if exists
+        try:
+            user = User.objects.get(email=email)
+            user.set_password(new_password)
+            user.save()
+        except User.DoesNotExist:
+            pass
+        
+        return Response({
+            'success': True,
+            'message': 'Password reset successfully'
+        }, status=status.HTTP_200_OK)
 
 class AdminSignupView(APIView):
     authentication_classes = []

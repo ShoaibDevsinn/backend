@@ -155,26 +155,37 @@ class UpdateUserView(APIView):
 
 
 class DeleteUserView(APIView):
-    """Delete user account"""
+    """Delete user account with all related predictions"""
     permission_classes = [IsAuthenticated, IsAdminUser]
     authentication_classes = [AdminJWTAuthentication]
     
     def delete(self, request, user_id):
-        if request.user.user_id == user_id:
+        # Prevent self-deletion
+        if str(request.user.user_id) == str(user_id):
             return Response({
                 'success': False,
                 'message': 'You cannot delete your own account'
             }, status=status.HTTP_400_BAD_REQUEST)
         
         from django.db import connection
-        with connection.cursor() as cursor:
-            cursor.execute("DELETE FROM `user` WHERE user_id = %s", [user_id])
         
-        return Response({
-            'success': True,
-            'message': 'User deleted successfully'
-        })
-
+        try:
+            with connection.cursor() as cursor:
+                # Step 1: Delete predictions first (handles foreign key)
+                cursor.execute("DELETE FROM prediction WHERE user_id = %s", [user_id])
+                
+                # Step 2: Delete the user
+                cursor.execute("DELETE FROM user WHERE user_id = %s", [user_id])
+                
+            return Response({
+                'success': True,
+                'message': 'User deleted successfully'
+            })
+        except Exception as e:
+            return Response({
+                'success': False,
+                'message': f'Error deleting user: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class ChangeUserStatusView(APIView):
     """Activate or deactivate user"""

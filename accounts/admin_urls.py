@@ -8,6 +8,7 @@ from .user_views import (
     UpdateUserView, DeleteUserView, ChangeUserStatusView, ChangeUserRoleView,
     BulkUserActionView
 )
+from accounts import admin_views
 
 urlpatterns = [
     # Admin Auth
@@ -17,6 +18,9 @@ urlpatterns = [
     path('profile/update', AdminProfileUpdateView.as_view(), name='admin-profile-update'),
     path('change-password', AdminChangePasswordView.as_view(), name='admin-change-password'),
     path('logout', AdminLogoutView.as_view(), name='admin-logout'),
+    path('forgot-password/', admin_views.AdminForgotPasswordView.as_view(), name='admin-forgot-password'),
+    path('verify-otp/', admin_views.AdminVerifyOTPView.as_view(), name='admin-verify-otp'),
+    path('reset-password/', admin_views.AdminResetPasswordView.as_view(), name='admin-reset-password'),
     
     # User Management
     path('users/stats/', DashboardStatsView.as_view(), name='admin-user-stats'),

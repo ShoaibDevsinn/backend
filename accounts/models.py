@@ -68,7 +68,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     # Profile Image Field
     profile_image = models.ImageField(upload_to='profile_images/', null=True, blank=True)
     
-    # ✅ OTP Fields for Forgot Password (MOVED INSIDE User class)
+    # OTP Fields for Forgot Password (MOVED INSIDE User class)
     otp_code = models.CharField(max_length=6, null=True, blank=True)
     otp_created_at = models.DateTimeField(null=True, blank=True)
     otp_verified = models.BooleanField(default=False)
@@ -153,6 +153,9 @@ class Admin(models.Model):
     phone = models.CharField(max_length=15, null=True, blank=True)
     last_login = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    otp_code = models.CharField(max_length=6, null=True, blank=True)
+    otp_created_at = models.DateTimeField(null=True, blank=True)
+    otp_verified = models.BooleanField(default=False)
     
     class Meta:
         db_table = 'admin'

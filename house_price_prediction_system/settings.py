@@ -5,6 +5,8 @@ Django settings for house_price_prediction_system project.
 from pathlib import Path
 from datetime import timedelta
 import pymysql
+import os
+from pathlib import Path
 pymysql.install_as_MySQLdb()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -30,11 +32,10 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt',
     'accounts',      
     'listings',      
-    'predictions', 
+    'predictions.apps.PredictionsConfig', 
     'historical_rates'
 ]
 
-# ✅ FIXED: CORS middleware MUST be at the top
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',  # Moved to top
     'django.middleware.security.SecurityMiddleware',
@@ -63,11 +64,21 @@ TEMPLATES = [
     },
 ]
 
+# Performance optimizations
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'prediction-cache',
+    }
+}
+
+# Model loading optimization
+os.environ['OMP_NUM_THREADS'] = '4'  # Limit XGBoost threads
+os.environ['JOBLIB_START_METHOD'] = 'loky'  # Better for Windows
+
 WSGI_APPLICATION = 'house_price_prediction_system.wsgi.application'
 
-# ✅ FIXED: Database configuration - TRY BOTH PORTS
-# First try port 3306 (default MySQL)
-# If that doesn't work, change back to 3307
+
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
@@ -75,7 +86,7 @@ DATABASES = {
         'USER': 'root',
         'PASSWORD': '#570689',
         'HOST': 'localhost',
-        'PORT': '3307',  # ✅ Changed from 3306 to 3307 (default MySQL port)
+        'PORT': '3307',  
         'OPTIONS': {
             'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
         },
@@ -111,19 +122,17 @@ MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 DATA_UPLOAD_MAX_NUMBER_FIELDS = 10240
 
-# ✅ FIXED: Only ONE AUTH_USER_MODEL (removed the duplicate)
-AUTH_USER_MODEL = 'accounts.User'  # Only keep this one
+AUTH_USER_MODEL = 'accounts.User'  
 
-# JWT Settings
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(hours=24),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
-    'ROTATE_REFRESH_TOKENS': False,
-    'BLACKLIST_AFTER_ROTATION': False,
+    'ROTATE_REFRESH_TOKENS': True,
+    'BLACKLIST_AFTER_ROTATION': True,
     'AUTH_HEADER_TYPES': ('Bearer',),
     'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
     'TOKEN_TYPE_CLAIM': 'token_type',
-    'USER_ID_FIELD': 'user_id',  # ← ADD THIS LINE
+    'USER_ID_FIELD': 'user_id',  
     'USER_ID_CLAIM': 'user_id', 
 }
 
@@ -151,7 +160,6 @@ EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
 EMAIL_HOST_USER = 'mshoaibahmad7770@gmail.com'
-EMAIL_HOST_PASSWORD = 'fuchbnuvjyrkexlz'  # Your 16-char app password (no spaces)
+EMAIL_HOST_PASSWORD = 'fuchbnuvjyrkexlz' 
 DEFAULT_FROM_EMAIL = 'mshoaibahmad7770@gmail.com'
 
-# EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'

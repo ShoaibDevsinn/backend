@@ -12,7 +12,7 @@ from .serializers import (
     ListingListSerializer
 )
 from .filters import ListingFilter
-from django.db.models import Count, Sum
+from django.db.models import Count, Sum, Q
 from django.db.models.functions import TruncMonth
 from datetime import datetime, timedelta
 
@@ -63,7 +63,7 @@ class AdminAddListingView(APIView):
                         data[field] = 0
             
             # Handle decimal fields
-            decimal_fields = ['area_marla', 'price', 'rent_price', 'current_per_marla_rate']
+            decimal_fields = ['area_marla', 'price', 'rent_price', 'current_per_marla_rate', 'expected_revenue']
             for field in decimal_fields:
                 if field in data and data[field]:
                     try:
@@ -79,10 +79,11 @@ class AdminAddListingView(APIView):
             serializer = ListingSerializer(data=data, context={'request': request})
             
             if serializer.is_valid():
-                # ✅ Save with created_by set to the current user
                 listing = serializer.save(created_by=request.user)
                 
                 print(f"Listing created: ID={listing.listing_id}, Title={listing.title}, Created by={listing.created_by}")
+                if listing.expected_revenue:
+                    print(f"Expected Revenue: {listing.expected_revenue}")
                 
                 return Response({
                     'success': True,
@@ -113,6 +114,16 @@ class AdminGetListingsView(APIView):
         listings = Listing.objects.filter(
             created_by=request.user
         ).select_related('location').prefetch_related('images').order_by('-created_at')
+        
+        # Add property_type filter
+        property_type = request.query_params.get('property_type')
+        if property_type:
+            listings = listings.filter(property_type=property_type)
+        
+        # Add property_status filter
+        property_status = request.query_params.get('property_status')
+        if property_status:
+            listings = listings.filter(property_status=property_status)
         
         serializer = ListingListSerializer(listings, many=True, context={'request': request})
         return Response({
@@ -185,8 +196,8 @@ class AdminUpdateListingView(APIView):
                 except (ValueError, TypeError):
                     pass
         
-        # Handle decimal fields
-        decimal_fields = ['area_marla', 'price', 'rent_price', 'current_per_marla_rate']
+        # Handle decimal fields including expected_revenue
+        decimal_fields = ['area_marla', 'price', 'rent_price', 'current_per_marla_rate', 'expected_revenue']
         for field in decimal_fields:
             if field in data and data[field]:
                 try:
@@ -202,7 +213,13 @@ class AdminUpdateListingView(APIView):
         serializer = ListingSerializer(listing, data=data, partial=True, context={'request': request})
         
         if serializer.is_valid():
-            serializer.save()
+            updated_listing = serializer.save()
+            
+            # Log revenue information when property is marked as sold
+            if data.get('property_status') == 'sold' and updated_listing.expected_revenue:
+                print(f"💰 Revenue added from property {listing_id}: {updated_listing.expected_revenue}")
+                print(f"   Buyer: {updated_listing.buyer_name}")
+            
             return Response({
                 'success': True,
                 'message': 'Listing updated successfully',
@@ -261,7 +278,9 @@ class PublicGetListingsView(APIView):
     permission_classes = [AllowAny]
     
     def get(self, request):
-        listings = Listing.objects.select_related('location').prefetch_related('images').all().order_by('-created_at')
+        listings = Listing.objects.select_related('location').prefetch_related('images').filter(
+            ~Q(property_status='sold')
+        ).order_by('-created_at')
         serializer = ListingListSerializer(listings, many=True, context={'request': request})
         return Response({
             'success': True,
@@ -279,7 +298,7 @@ class PublicGetListingDetailView(APIView):
             serializer = ListingSerializer(listing, context={'request': request})
             return Response({
                 'success': True,
-                'data': serializer._validated_data
+                'data': serializer.data
             })
         except Listing.DoesNotExist:
             return Response({
@@ -292,7 +311,9 @@ class PublicFilteredListingsView(APIView):
     permission_classes = [AllowAny]
     
     def get(self, request):
-        queryset = Listing.objects.select_related('location').prefetch_related('images').all()
+        queryset = Listing.objects.select_related('location').prefetch_related('images').filter(
+            ~Q(property_status='sold')
+        )
         
         filter_instance = ListingFilter(queryset, request)
         filtered_queryset = filter_instance.filter()
@@ -311,7 +332,7 @@ class PublicFilteredListingsView(APIView):
             'filters_applied': dict(request.query_params),
             'data': serializer.data
         })
-
+    
 
 class AdminFilteredListingsView(APIView):
     permission_classes = [IsAuthenticated, IsAdminUser]
@@ -390,6 +411,7 @@ class FilterOptionsView(APIView):
             }
         })
 
+
 class AdminDashboardStatsView(APIView):
     permission_classes = [IsAuthenticated, IsAdminUser]
     
@@ -399,20 +421,31 @@ class AdminDashboardStatsView(APIView):
         total_properties = listings.count()
         sold_properties = listings.filter(property_status='sold').count()
         active_listings = listings.filter(property_status='available').count()
-        rent_listings = listings.filter(property_status='rent').count()
+        rent_listings = listings.filter(property_type='rent').count()
         
-        total_revenue = listings.filter(property_status='sold').aggregate(
-            total=models.Sum('price')
+        total_revenue = listings.filter(
+            property_status='sold',
+            expected_revenue__isnull=False
+        ).aggregate(
+            total=models.Sum('expected_revenue')
+        )['total'] or 0
+        
+        total_profit = listings.filter(
+            property_status='sold',
+            expected_revenue__isnull=False
+        ).aggregate(
+            total=models.Sum('expected_revenue')
         )['total'] or 0
         
         recent_listings = listings.order_by('-created_at')[:5]
         recent_serializer = ListingListSerializer(recent_listings, many=True, context={'request': request})
+        
         six_months_ago = datetime.now() - timedelta(days=180)
         monthly_stats = listings.filter(created_at__gte=six_months_ago).annotate(
             month=TruncMonth('created_at')
         ).values('month').annotate(
             count=Count('listing_id'),
-            revenue=Sum('price')
+            revenue=Sum('expected_revenue', filter=Q(property_status='sold'))
         ).order_by('month')
         
         return Response({
@@ -423,7 +456,57 @@ class AdminDashboardStatsView(APIView):
                 'active_listings': active_listings,
                 'rent_listings': rent_listings,
                 'total_revenue': float(total_revenue),
+                'total_profit': float(total_profit),
                 'recent_listings': recent_serializer.data,
                 'monthly_stats': list(monthly_stats)
+            }
+        })
+
+
+class PublicStatisticsView(APIView):
+    permission_classes = [AllowAny]
+    
+    def get(self, request):
+        # Get ALL properties for statistics (including sold)
+        all_listings = Listing.objects.select_related('location').prefetch_related('images').all()
+        
+        total_properties = all_listings.count()
+        sold_properties = all_listings.filter(property_status='sold').count()
+        available_properties = all_listings.filter(property_status='available').count()
+        
+        # Calculate price statistics from ALL properties (including sold)
+        prices = all_listings.filter(price__isnull=False).exclude(price=0).values_list('price', flat=True)
+        
+        # Calculate max price from available properties only (for display)
+        available_prices = all_listings.filter(
+            property_status='available',
+            price__isnull=False
+        ).exclude(price=0).values_list('price', flat=True)
+        
+        if prices:
+            avg_price = sum(prices) / len(prices)
+            min_price = min(prices)
+            max_price = max(prices) if prices else 0
+            max_available_price = max(available_prices) if available_prices else max_price
+        else:
+            avg_price = min_price = max_price = max_available_price = 0
+        
+        total_revenue = all_listings.filter(
+            property_status='sold',
+            expected_revenue__isnull=False
+        ).aggregate(
+            total=models.Sum('expected_revenue')
+        )['total'] or 0
+        
+        return Response({
+            'success': True,
+            'data': {
+                'total_properties': total_properties,
+                'sold_properties': sold_properties,
+                'available_properties': available_properties,
+                'avg_price': float(avg_price),
+                'min_price': float(min_price),
+                'max_price': float(max_available_price),  # Max price of available properties
+                'total_revenue': float(total_revenue),
             }
         })

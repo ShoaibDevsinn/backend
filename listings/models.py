@@ -34,8 +34,14 @@ class Listing(models.Model):
     # Status Choices
     PROPERTY_STATUS_CHOICES = [
         ('available', 'Available'),
-        ('rent', 'For Rent'),
         ('sold', 'Sold'),
+    ]
+    
+    # Property Type Choices
+    PROPERTY_TYPE_CHOICES = [
+        ('house', 'House'),
+        ('plot', 'Plot'),
+        ('rent', 'Rent'),
     ]
     
     # Basic Information
@@ -44,8 +50,27 @@ class Listing(models.Model):
     location = models.ForeignKey(Location, on_delete=models.CASCADE, db_column='location_id')
     area_marla = models.DecimalField(max_digits=8, decimal_places=2, help_text="Area in Marlas")
     price = models.DecimalField(max_digits=15, decimal_places=2, help_text="Sale Price")
+    
+    # Property Type field
+    property_type = models.CharField(max_length=10, choices=PROPERTY_TYPE_CHOICES, default='house')
+    
     property_status = models.CharField(max_length=10, choices=PROPERTY_STATUS_CHOICES, default='available')
     rent_price = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, help_text="Monthly rent (if applicable)")
+    
+    #  NEW: Revenue/Profit Tracking Fields
+    expected_revenue = models.DecimalField(
+        max_digits=15, 
+        decimal_places=2, 
+        null=True, 
+        blank=True,
+        help_text="Expected profit/revenue from this deal (cannot exceed property price)"
+    )
+    buyer_name = models.CharField(
+        max_length=200, 
+        null=True, 
+        blank=True,
+        help_text="Buyer's name (required when property status is 'sold')"
+    )
     
     # Property Details
     bedrooms = models.IntegerField(default=1)
@@ -78,7 +103,7 @@ class Listing(models.Model):
     # Description
     description = models.TextField()
     
-    # ✅ FIXED: ForeignKey to User model instead of IntegerField
+    # ForeignKey to User model
     created_by = models.ForeignKey(
         User, 
         on_delete=models.CASCADE, 
@@ -123,3 +148,8 @@ class Listing(models.Model):
         if self.has_living_room: amenities.append('Living Room')
         if self.has_electricity_backup: amenities.append('Electricity Backup')
         return amenities
+    
+    @property
+    def is_profit_eligible(self):
+        """Check if this listing should contribute to profit/revenue"""
+        return self.property_status == 'sold' and self.expected_revenue is not None and self.expected_revenue > 0

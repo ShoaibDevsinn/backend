@@ -12,9 +12,8 @@ from .views import (
 )
 
 urlpatterns = [
-    # ==========================================
+    
     # PUBLIC ENDPOINTS (No Authentication)
-    # ==========================================
     
     # Dashboard stats (public)
     path('public/stats', PublicDashboardStatsView.as_view(), name='public-stats'),
@@ -31,9 +30,7 @@ urlpatterns = [
     # Compare years (public)
     path('public/locations/<int:location_id>/compare-years', PublicYearComparisonView.as_view(), name='public-compare-years'),
     
-    # ==========================================
     # ADMIN ENDPOINTS (Authentication Required)
-    # ==========================================
     
     # Dashboard & Statistics
     path('admin/dashboard/stats', DashboardStatsView.as_view(), name='admin-dashboard-stats'),

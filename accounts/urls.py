@@ -22,24 +22,18 @@ urlpatterns = [
     path('user/', GetUserInfoView.as_view(), name='user-info'),
     path('change-password/', ChangePasswordView.as_view(), name='change-password'),
     
-    # ============================================================
     # PROFILE MANAGEMENT URLs (User Profile - Authentication required)
-    # ============================================================
     path('user/update-email/', UpdateEmailView.as_view(), name='update-email'),
     path('user/update-username/', UpdateUsernameView.as_view(), name='update-username'),
     path('user/update-profile-image/', UpdateProfileImageView.as_view(), name='update-profile-image'),
     path('user/profile/', GetProfileView.as_view(), name='user-profile'),
     
-    # ============================================================
     # FORGOT PASSWORD URLs (No authentication required)
-    # ============================================================
     path('forgot-password/', ForgotPasswordView.as_view(), name='forgot-password'),
     path('verify-otp/', VerifyOTPView.as_view(), name='verify-otp'),
     path('reset-password/', ResetPasswordView.as_view(), name='reset-password'),
     
-    # ============================================================
     # User Management URLs (Admin only)
-    # ============================================================
     path('users/stats/', DashboardStatsView.as_view(), name='user-stats'),
     path('users/', UserListView.as_view(), name='user-list'),
     path('users/create/', CreateUserView.as_view(), name='user-create'),

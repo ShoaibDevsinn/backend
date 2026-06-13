@@ -1,4 +1,3 @@
-# H:\Backend\predictions\retrain_model.py
 import pandas as pd
 import numpy as np
 import warnings
@@ -16,17 +15,13 @@ import joblib
 import os
 
 warnings.filterwarnings('ignore')
-print("✅ Libraries imported")
+print(" Libraries imported")
 
-# ============================================
 # LOAD DATA
-# ============================================
 df = pd.read_csv(r"H:\City_Deals_Agency.csv")
-print(f"✅ Data loaded: {df.shape[0]:,} rows × {df.shape[1]} columns")
+print(f" Data loaded: {df.shape[0]:,} rows × {df.shape[1]} columns")
 
-# ============================================
 # PREPROCESSING
-# ============================================
 
 # Remove Arab prices
 df = df[~df['Price'].str.contains('Arab', na=False)].copy()
@@ -88,9 +83,9 @@ def price_to_pkr(price_str):
 df['Area_SqFt'] = df['Area'].apply(area_to_sqft)
 df['Price_PKR'] = df['Price'].apply(price_to_pkr)
 
-print(f"✅ Units converted")
+print(f" Units converted")
 df = df.dropna(subset=['Area_SqFt', 'Price_PKR'])
-print(f"✅ Rows after dropping missing: {df.shape[0]:,}")
+print(f" Rows after dropping missing: {df.shape[0]:,}")
 
 # Clean numeric columns - FIXED: Convert to numeric first
 def safe_numeric(series):
@@ -118,7 +113,7 @@ if 'Built Year' in df.columns:
 else:
     df['Built Year'] = 2020
 
-print(f"✅ Numeric columns cleaned. Rows: {df.shape[0]:,}")
+print(f" Numeric columns cleaned. Rows: {df.shape[0]:,}")
 
 # Number of floors extraction
 def extract_floors_from_title(title):
@@ -164,7 +159,7 @@ else:
     )
 
 df['Num_Floors'] = df['Num_Floors'].fillna(2).astype(int)
-print(f"✅ Num_Floors created")
+print(f" Num_Floors created")
 
 # Amenities encoding
 BOOLEAN_AMENITY_COLS = [
@@ -192,7 +187,7 @@ for col in ['Servant Quarters', 'Store Rooms']:
     else:
         df[col] = 0
 
-print(f"✅ Amenities encoded")
+print(f" Amenities encoded")
 
 # Feature engineering
 CURRENT_YEAR = 2025
@@ -231,7 +226,7 @@ df['Bathroom_Ratio'] = df['Bathrooms'] / df['Bedrooms'].clip(lower=1)
 df['Beds_x_Floors'] = df['Bedrooms'] * df['Num_Floors']
 df['Age_x_Amenities'] = df['House_Age'] * df['Total_Amenities']
 
-print(f"✅ Features engineered. Shape: {df.shape}")
+print(f" Features engineered. Shape: {df.shape}")
 
 # Remove outliers
 rows_before = df.shape[0]
@@ -249,12 +244,10 @@ pps_lower = temp_pps.quantile(0.01)
 pps_upper = temp_pps.quantile(0.99)
 df = df[(temp_pps >= pps_lower) & (temp_pps <= pps_upper)]
 
-print(f"✅ Outliers removed: {rows_before - df.shape[0]} rows")
+print(f" Outliers removed: {rows_before - df.shape[0]} rows")
 print(f"   Remaining: {df.shape[0]:,} rows")
 
-# ============================================
 # FEATURE SELECTION
-# ============================================
 CATEGORICAL_FEATURES = ['Main_Location']
 
 NUMERICAL_FEATURES = [
@@ -274,7 +267,7 @@ feature_cols = CATEGORICAL_FEATURES + NUMERICAL_FEATURES
 X = df[feature_cols].copy()
 y = np.log1p(df['Price_PKR'])
 
-print(f"✅ Features: {X.shape[1]} columns")
+print(f" Features: {X.shape[1]} columns")
 
 # Handle NaN
 X = X.replace([np.inf, -np.inf], np.nan)
@@ -286,20 +279,16 @@ for col in CATEGORICAL_FEATURES:
     if col in X.columns:
         X[col] = X[col].fillna('Unknown')
 
-print(f"✅ Sanitised. Remaining NaN: {X.isna().sum().sum()}")
+print(f" Sanitised. Remaining NaN: {X.isna().sum().sum()}")
 
-# ============================================
 # TRAIN-TEST SPLIT
-# ============================================
 price_bins = pd.qcut(df['Price_PKR'], q=10, labels=False, duplicates='drop')
 X_train, X_test, y_train, y_test = train_test_split(
     X, y, test_size=0.20, random_state=42, stratify=price_bins
 )
-print(f"✅ Train: {X_train.shape[0]:,} | Test: {X_test.shape[0]:,}")
+print(f" Train: {X_train.shape[0]:,} | Test: {X_test.shape[0]:,}")
 
-# ============================================
 # PREPROCESSOR
-# ============================================
 numerical_transformer = Pipeline(steps=[
     ('imputer', SimpleImputer(strategy='median')),
     ('scaler', StandardScaler())
@@ -318,13 +307,11 @@ preprocessor = ColumnTransformer(
     remainder='drop'
 )
 
-# ============================================
 # MODEL
-# ============================================
 xgb_model = xgb.XGBRegressor(
-    n_estimators=500,
+    n_estimators=100,
     max_depth=6,
-    learning_rate=0.05,
+    learning_rate=0.1, 
     subsample=0.85,
     colsample_bytree=0.85,
     min_child_weight=3,
@@ -342,15 +329,11 @@ xgb_pipeline = Pipeline(steps=[
     ('regressor', xgb_model)
 ])
 
-# ============================================
 # TRAIN
-# ============================================
 print("⏳ Training XGBoost...")
 xgb_pipeline.fit(X_train, y_train)
 
-# ============================================
 # EVALUATE
-# ============================================
 y_pred_log_test = xgb_pipeline.predict(X_test)
 y_test_pkr = np.expm1(y_test)
 y_pred_test_pkr = np.expm1(y_pred_log_test)
@@ -359,23 +342,22 @@ test_r2 = r2_score(y_test_pkr, y_pred_test_pkr)
 test_mae = mean_absolute_error(y_test_pkr, y_pred_test_pkr)
 
 print(f"\n{'='*60}")
-print(f"📊 MODEL PERFORMANCE")
+print(f" MODEL PERFORMANCE")
 print(f"{'='*60}")
 print(f"   Test R² : {test_r2:.4f}")
 print(f"   Test MAE: PKR {test_mae:,.0f}")
 
-# ============================================
 # SAVE MODEL
-# ============================================
-print("\n💾 Saving model...")
+print("\n Saving model...")
 os.makedirs('predictions/models', exist_ok=True)
 
 pipeline_path = 'predictions/models/property_price_pipeline.pkl'
-joblib.dump(xgb_pipeline, pipeline_path)
-
+# Compressed save (smaller file, faster load)
+joblib.dump(xgb_pipeline, pipeline_path, compress=3)
+print(f" Model saved with compression")
 feature_cols_path = 'predictions/models/feature_columns.pkl'
 joblib.dump(X.columns.tolist(), feature_cols_path)
 
-print(f"✅ Model saved to: {pipeline_path}")
-print(f"✅ Feature columns saved to: {feature_cols_path}")
-print("\n✅ Retraining complete! The model is now compatible.")
+print(f" Model saved to: {pipeline_path}")
+print(f" Feature columns saved to: {feature_cols_path}")
+print("\n Retraining complete! The model is now compatible.")

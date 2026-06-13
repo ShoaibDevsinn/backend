@@ -8,7 +8,8 @@ from .views import (
     AdminFilteredListingsView,
     PublicGetListingsView, PublicGetListingDetailView,
     PublicFilteredListingsView,
-    FilterOptionsView
+    FilterOptionsView,
+    PublicStatisticsView
 )
 
 urlpatterns = [
@@ -23,9 +24,10 @@ urlpatterns = [
     
     # Public endpoints
     path('locations', LocationListView.as_view(), name='locations'),
-    path('listings', PublicGetListingsView.as_view(), name='public-get-listings'),
+    path('listings', PublicFilteredListingsView.as_view(), name='public-get-listings'), 
     path('listings/<int:listing_id>', PublicGetListingDetailView.as_view(), name='public-listing-detail'),
     path('filter', PublicFilteredListingsView.as_view(), name='filter-listings'),
     path('filter-options', FilterOptionsView.as_view(), name='filter-options'),
     path('admin/dashboard-stats', AdminDashboardStatsView.as_view(), name='admin-dashboard-stats'),
+    path('statistics', PublicStatisticsView.as_view(), name='public-statistics')
 ]

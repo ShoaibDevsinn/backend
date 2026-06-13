@@ -19,9 +19,7 @@ import io
 from datetime import datetime
 
 
-# ============================================================
 # PUBLIC VIEWS - No Authentication Required
-# ============================================================
 
 class PublicLocationListView(APIView):
     """
